@@ -12,12 +12,28 @@ return {
   lazy = false,
   keys = {
     { '<leader>d', ':Neotree reveal<CR>', desc = 'NeoTree reveal', silent = true },
+    { '<leader>nb', ':Neotree buffers<CR>', desc = 'NeoTree buffers', silent = true },
   },
   opts = {
+    window = {
+      auto_expand_width = true,
+    },
     filesystem = {
+      filtered_items = {
+        visible = true,
+        show_hidden_count = true,
+        hide_dotfiles = false,
+        hide_gitignored = false,
+        hide_by_name = {
+          'thumbs.db',
+          '.git',
+          '.DS_Store',
+        },
+        never_show = {},
+      },
       window = {
         mappings = {
-          ['<leader>d'] = 'close_window',
+          ['<leader>nd'] = 'close_window',
         },
       },
     },

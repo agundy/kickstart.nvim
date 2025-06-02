@@ -174,7 +174,51 @@ vim.o.confirm = true
 vim.keymap.set('n', '<Esc>', '<cmd>nohlsearch<CR>')
 
 -- Diagnostic keymaps
+vim.keymap.set('n', '[x', vim.diagnostic.goto_prev, { desc = 'Go to previous [D]iagnostic message' })
+vim.keymap.set('n', ']x', vim.diagnostic.goto_next, { desc = 'Go to next [D]iagnostic message' })
+vim.keymap.set('n', '<leader>e', vim.diagnostic.open_float, { desc = 'Show diagnostic [E]rror messages' })
 vim.keymap.set('n', '<leader>q', vim.diagnostic.setloclist, { desc = 'Open diagnostic [Q]uickfix list' })
+
+vim.g['diagnostics_active'] = true
+vim.g['diagnostics_quiet'] = false
+
+function Toggle_diagnostics()
+  if vim.g.diagnostics_active then
+    vim.g.diagnostics_active = false
+    vim.diagnostic.enable(false)
+  else
+    vim.g.diagnostics_active = true
+    vim.diagnostic.enable()
+  end
+end
+
+function Toggle_silent_diagnostics()
+  if vim.g.diagnostics_quiet then
+    vim.g.diagnostics_quiet = false
+    vim.lsp.diagnostic.virtual_text = false
+  else
+    vim.g.diagnostics_quiet = true
+    vim.lsp.diagnostic.virtual_text = true
+  end
+end
+
+vim.keymap.set('n', '<leader>xo', vim.diagnostic.open_float, { noremap = true, silent = true, desc = 'Open vim diagnostics' })
+vim.keymap.set('n', '<leader>xd', Toggle_diagnostics, { noremap = true, silent = true, desc = 'Toggle vim diagnostics' })
+vim.keymap.set('n', '<leader>xq', Toggle_silent_diagnostics, { noremap = true, silent = true, desc = 'Toggle vim diagnostics virtual text' })
+
+vim.diagnostic.config {
+  virtual_text = {
+    prefix = '|',
+    severity = { min = vim.diagnostic.severity.ERROR },
+  },
+  underline = {
+    severity = { max = vim.diagnostic.severity.WARN },
+  },
+}
+vim.cmd [[highlight DiagnosticVirtualTextError ctermfg=White ]]
+vim.cmd [[ highlight DiagnosticVirtualTextInfo ctermfg=White ]]
+vim.cmd [[ highlight DiagnosticVirtualTextWarn ctermfg=White ]]
+vim.cmd [[ highlight DiagnosticVirtualTextHint ctermfg=White ]]
 
 -- Exit terminal mode in the builtin terminal with a shortcut that is a bit easier
 -- for people to discover. Otherwise, you normally need to press <C-\><C-n>, which
@@ -508,13 +552,34 @@ require('lazy').setup({
           local elixirls = require 'elixir.elixirls'
 
           elixir.setup {
-            nextls = { enable = true },
+            nextls = {
+              enable = false,
+              root_dir = function(fname)
+                local matches = vim.fs.find({ 'mix.exs' }, { upward = true, limit = 2, path = fname })
+                local child_or_root_path, maybe_umbrella_path = unpack(matches)
+                local root_dir = vim.fs.dirname(maybe_umbrella_path or child_or_root_path)
+
+                return root_dir
+              end,
+              init_options = {
+                mix_env = 'dev',
+                mix_target = 'host',
+                experimental = {
+                  completions = {
+                    enable = true, -- control if completions are enabled. defaults to false
+                  },
+                },
+              },
+            },
             credo = {},
             elixirls = {
               enable = true,
               settings = elixirls.settings {
                 dialyzerEnabled = false,
                 enableTestLenses = false,
+                mixEnv = 'dev',
+                suggestSpecs = true,
+                fetchDeps = true,
               },
               on_attach = function(client, bufnr)
                 vim.keymap.set('n', '<space>fp', ':ElixirFromPipe<cr>', { buffer = true, noremap = true })
@@ -621,6 +686,30 @@ require('lazy').setup({
               return client.supports_method(method, { bufnr = bufnr })
             end
           end
+          
+          -- Fuzzy find all the symbols in your current document.
+          --  Symbols are things like variables, functions, types, etc.
+          map('<leader>ds', require('telescope.builtin').lsp_document_symbols, '[D]ocument [S]ymbols')
+
+          -- Fuzzy find all the symbols in your current workspace.
+          --  Similar to document symbols, except searches over your entire project.
+          map('<leader>ws', require('telescope.builtin').lsp_dynamic_workspace_symbols, '[W]orkspace [S]ymbols')
+
+          -- Rename the variable under your cursor.
+          --  Most Language Servers support renaming across files, etc.
+          map('<leader>rn', vim.lsp.buf.rename, '[R]e[n]ame')
+
+          -- Execute a code action, usually your cursor needs to be on top of an error
+          -- or a suggestion from your LSP for this to activate.
+          map('<leader>ca', vim.lsp.buf.code_action, '[C]ode [A]ction')
+
+          -- Opens a popup that displays documentation about the word under your cursor
+          --  See `:help K` for why this keymap.
+          -- map('K', vim.lsp.buf.hover, 'Hover Documentation')
+
+          -- WARN: This is not Goto Definition, this is Goto Declaration.
+          --  For example, in C this would take you to the header.
+          map('gD', vim.lsp.buf.declaration, '[G]oto [D]eclaration')
 
           -- The following two autocommands are used to highlight references of the
           -- word under your cursor when your cursor rests there for a little while.
@@ -937,6 +1026,21 @@ require('lazy').setup({
       vim.cmd.hi 'Comment gui=none'
     end,
   },
+  {
+    'mason-org/mason.nvim',
+    -- Add in any other configuration;
+    --   event = foo,
+    --   config = bar
+    --   end,
+  },
+
+  {
+    'nyoom-engineering/oxocarbon.nvim',
+    -- Add in any other configuration;
+    --   event = foo,
+    --   config = bar
+    --   end,
+  },
 
   -- Highlight todo, notes, etc in comments
   { 'folke/todo-comments.nvim', event = 'VimEnter', dependencies = { 'nvim-lua/plenary.nvim' }, opts = { signs = false } },
@@ -1016,6 +1120,46 @@ require('lazy').setup({
   },
   { 'michal-h21/vim-zettel' },
 
+  -- Vim Git integration
+  { 'tpope/vim-fugitive' },
+  {
+    'NeogitOrg/neogit',
+    dependencies = {
+      'nvim-lua/plenary.nvim', -- required
+      'sindrets/diffview.nvim', -- optional - Diff integration
+
+      -- Only one of these is needed, not both.
+      'nvim-telescope/telescope.nvim', -- optional
+      'ibhagwan/fzf-lua', -- optional
+    },
+    config = true,
+  },
+  { -- Collection of various small independent plugins/modules
+    'mileszs/ack.vim',
+    lazy = false,
+    init = function()
+      vim.cmd [[ 
+        if executable('ag')
+          let g:ackprg = 'ag --vimgrep'
+        endif
+      ]]
+    end,
+  },
+  {
+    'vim-test/vim-test',
+    lazy = false,
+    init = function()
+      vim.cmd [[
+      let test#strategy = "neovim"
+      nmap <silent> <leader>t :TestNearest<CR>
+      nmap <silent> <leader>T :TestFile<CR>
+      nmap <silent> <leader>ta :TestSuite<CR>
+      nmap <silent> <leader>l :TestLast<CR>
+      nmap <silent> <leader>g :TestVisit<CR>
+      ]]
+    end,
+  },
+
   -- The following two comments only work if you have downloaded the kickstart repo, not just copy pasted the
   -- init.lua. If you want these files, they are in the repository, so you can just download them and
   -- place them in the correct locations.
@@ -1036,12 +1180,9 @@ require('lazy').setup({
   --    This is the easiest way to modularize your config.
   --
   --  Uncomment the following line and add your plugins to `lua/custom/plugins/*.lua` to get going.
-  -- { import = 'custom.plugins' },
-  --
-  -- For additional information with loading, sourcing and examples see `:help lazy.nvim-🔌-plugin-spec`
-  -- Or use telescope!
-  -- In normal mode type `<space>sh` then write `lazy.nvim-plugin`
-  -- you can continue same window with `<space>sr` which resumes last telescope search
+  --    For additional information, see `:help lazy.nvim-lazy.nvim-structuring-your-plugins`
+  { import = 'custom.plugins' },
+  
 }, {
   ui = {
     -- If you are using a Nerd Font: set icons to an empty table which will use the
